@@ -1,16 +1,34 @@
 'use strict';
 
+/* ───────────────────────────────
+   SAFE AUTH MIDDLEWARE (RAILWAY SAFE)
+   ─────────────────────────────── */
+
 function requireAuth(req, res, next) {
-  if (req.session && req.session.ownerId) return next();
-  const isApi = req.path.startsWith('/api/') || (req.headers.accept || '').includes('application/json');
-  if (isApi) return res.status(401).json({ error: 'Authentication required.' });
-  req.session.returnTo = req.originalUrl;
-  return res.redirect('/admin/login');
+  try {
+    if (req.session && req.session.ownerId) {
+      return next();
+    }
+    return res.redirect('/admin/login');
+  } catch (err) {
+    console.error('[requireAuth ERROR]', err);
+    return res.status(500).send('Internal Server Error');
+  }
 }
 
 function requireGuest(req, res, next) {
-  if (req.session && req.session.ownerId) return res.redirect('/admin/dashboard');
-  next();
+  try {
+    if (req.session && req.session.ownerId) {
+      return res.redirect('/admin/dashboard');
+    }
+    return next();
+  } catch (err) {
+    console.error('[requireGuest ERROR]', err);
+    return res.status(500).send('Internal Server Error');
+  }
 }
 
-module.exports = { requireAuth, requireGuest };
+module.exports = {
+  requireAuth,
+  requireGuest
+};
