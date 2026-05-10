@@ -4,45 +4,86 @@ require('dotenv').config();
 
 const express = require('express');
 const path = require('path');
+const helmet = require('helmet');
+const session = require('express-session');
+const cookieParser = require('cookie-parser');
+const rateLimit = require('express-rate-limit');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-/* =====================
-   INSTANT HEALTHCHECKS
-   (THIS IS CRITICAL)
-===================== */
-
-app.get('/', (req, res) => {
-  res.status(200).send('OK');
-});
-
+/* =========================
+   REQUIRED FOR RAILWAY
+========================= */
 app.get('/health', (req, res) => {
   res.status(200).send('OK');
 });
 
-/* =====================
-   STATIC FILES
-===================== */
+/* =========================
+   MIDDLEWARE
+========================= */
+app.set('trust proxy', 1);
+app.use(helmet());
+app.use(express.json({ limit: '10kb' }));
+app.use(express.urlencoded({ extended: true }));
+app.use(cookieParser());
 
+/* =========================
+   STATIC FILES (FRONTEND)
+========================= */
 app.use(express.static(path.join(__dirname, 'public')));
 
-/* =====================
-   REAL SITE ENTRY
-===================== */
+/* =========================
+   SESSIONS
+========================= */
+app.use(session({
+  secret: process.env.SESSION_SECRET || 'haka-dev-secret',
+  resave: false,
+  saveUninitialized: false,
+  cookie: {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'lax',
+    maxAge: 8 * 60 * 60 * 1000
+  }
+}));
 
-app.get('/site', (req, res) => {
+/* =========================
+   RATE LIMITING
+========================= */
+app.use('/api', rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 200
+}));
+
+/* =========================
+   ROUTES (BACKEND)
+========================= */
+app.use('/api', require('./routes/public'));
+app.use('/admin', require('./routes/admin'));
+
+/* =========================
+   ROOT = REAL WEBSITE
+========================= */
+app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-/* =====================
+/* =========================
+   ERROR HANDLER
+========================= */
+app.use((err, req, res, next) => {
+  console.error('[ERROR]', err);
+  res.status(500).send('Internal Server Error');
+});
+
+/* =========================
    START SERVER FIRST
-===================== */
-
+========================= */
 app.listen(PORT, '0.0.0.0', () => {
-  console.log(`[SERVER] Listening on ${PORT}`);
+  console.log(`[SERVER] Running on port ${PORT}`);
 
-  // Load heavy stuff AFTER server is live
+  // Load DB AFTER server is live (prevents healthcheck failure)
   setTimeout(async () => {
     try {
       const { initDatabase } = require('./config/database');
@@ -51,5 +92,5 @@ app.listen(PORT, '0.0.0.0', () => {
     } catch (err) {
       console.error('[DB WARNING]', err.message);
     }
-  }, 1000);
+  }, 500);
 });
