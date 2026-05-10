@@ -89,33 +89,43 @@ app.use((err, req, res, next) => {
    HEALTH CHECK ENDPOINT
    ─────────────────────────────── */
 
-app.get('/health', async (req, res) => {
-  try {
-    // Simple health check - just check if server is running
-    res.json({ status: 'ok', timestamp: new Date().toISOString() });
-  } catch (err) {
-    res.status(500).json({ status: 'error', message: 'Health check failed' });
-  }
+let dbReady = false;
+
+app.get('/health', (req, res) => {
+  res.status(200).json({ status: 'ok', db: dbReady ? 'connected' : 'initializing', timestamp: new Date().toISOString() });
 });
 
 /* ───────────────────────────────
-   START (GRACEFUL DB INIT)
+   START SERVER IMMEDIATELY
    ─────────────────────────────── */
 
-const startServer = () => {
-  app.listen(PORT, '0.0.0.0', () => {
-    console.log(`Haka Barbers running on port ${PORT}`);
-  });
-};
+const server = app.listen(PORT, '0.0.0.0', () => {
+  console.log(`[SERVER] Haka Barbers running on port ${PORT}`);
+});
 
-// Try to initialize database, but don't fail if it doesn't work
-initDatabase()
-  .then(() => {
+/* ───────────────────────────────
+   INITIALIZE DATABASE IN BACKGROUND
+   ─────────────────────────────── */
+
+(async () => {
+  try {
+    await initDatabase();
+    dbReady = true;
     console.log('[DB] Database initialized successfully');
-    startServer();
-  })
-  .catch(err => {
+  } catch (err) {
     console.error('[DB INIT WARNING]', err.message);
-    console.log('[DB] Starting server without database - some features may not work');
-    startServer();
+    console.log('[DB] Database will retry on next request');
+  }
+})();
+
+/* ───────────────────────────────
+   GRACEFUL SHUTDOWN
+   ─────────────────────────────── */
+
+process.on('SIGTERM', () => {
+  console.log('[SERVER] SIGTERM received, shutting down gracefully');
+  server.close(() => {
+    console.log('[SERVER] Server closed');
+    process.exit(0);
   });
+});
