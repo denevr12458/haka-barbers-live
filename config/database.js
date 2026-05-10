@@ -1,103 +1,43 @@
 'use strict';
 
-const path = require('path');
-const fs = require('fs');
-const sqlite3 = require('sqlite3').verbose();
+const { Pool } = require('pg');
 
-const DATA_DIR = path.join(__dirname, '..', 'data');
-const DB_PATH = path.join(DATA_DIR, 'app.db');
-
-/* ─────────────────────────────────────────────
-   ENSURE DATA FOLDER EXISTS (IMPORTANT FOR RAILWAY)
-   ───────────────────────────────────────────── */
-if (!fs.existsSync(DATA_DIR)) {
-  fs.mkdirSync(DATA_DIR, { recursive: true });
-}
-
-/* ─────────────────────────────────────────────
-   CREATE / CONNECT DATABASE
-   ───────────────────────────────────────────── */
-const db = new sqlite3.Database(DB_PATH, (err) => {
-  if (err) {
-    console.error('[DB CONNECTION ERROR]', err);
-  } else {
-    console.log('[DB] Connected:', DB_PATH);
-  }
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: process.env.NODE_ENV === 'production'
+    ? { rejectUnauthorized: false }
+    : false,
 });
 
-/* ─────────────────────────────────────────────
-   CREATE ALL REQUIRED TABLES (FIXES YOUR LOGIN ISSUE)
-   ───────────────────────────────────────────── */
-db.serialize(() => {
+const db = {
+  query: (text, params) => pool.query(text, params),
 
-  // Owners (ADMIN LOGIN)
-  db.run(`
-    CREATE TABLE IF NOT EXISTS owners (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      username TEXT UNIQUE,
-      password TEXT
-    )
-  `);
+  get: async (text, params, cb) => {
+    try {
+      const res = await pool.query(text, params);
+      cb(null, res.rows[0]);
+    } catch (err) {
+      cb(err);
+    }
+  },
 
-  // Services
-  db.run(`
-    CREATE TABLE IF NOT EXISTS services (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      name TEXT,
-      duration INTEGER,
-      price REAL
-    )
-  `);
+  all: async (text, params, cb) => {
+    try {
+      const res = await pool.query(text, params);
+      cb(null, res.rows);
+    } catch (err) {
+      cb(err);
+    }
+  },
 
-  // Bookings
-  db.run(`
-    CREATE TABLE IF NOT EXISTS bookings (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      service_id INTEGER,
-      booking_date TEXT,
-      start_time TEXT,
-      status TEXT DEFAULT 'confirmed'
-    )
-  `);
-
-  // Blocked slots
-  db.run(`
-    CREATE TABLE IF NOT EXISTS blocked_slots (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      block_date TEXT,
-      start_time TEXT,
-      end_time TEXT,
-      reason TEXT
-    )
-  `);
-});
-
-/* ─────────────────────────────────────────────
-   AUTO-CREATE DEFAULT ADMIN (THIS FIXES YOUR LOGIN CRASH)
-   ───────────────────────────────────────────── */
-const bcrypt = require('bcryptjs');
-
-db.get('SELECT COUNT(*) as count FROM owners', async (err, row) => {
-  if (err) {
-    console.error('[DB SEED ERROR]', err);
-    return;
+  run: async (text, params, cb) => {
+    try {
+      const res = await pool.query(text, params);
+      cb(null, res);
+    } catch (err) {
+      cb(err);
+    }
   }
-
-  if (row.count === 0) {
-    const hash = await bcrypt.hash('admin123', 12);
-
-    db.run(
-      'INSERT INTO owners (username, password) VALUES (?, ?)',
-      ['admin', hash],
-      (err) => {
-        if (err) {
-          console.error('[ADMIN SEED ERROR]', err);
-        } else {
-          console.log('[ADMIN CREATED] username: admin | password: admin123');
-        }
-      }
-    );
-  }
-});
+};
 
 module.exports = { db };
