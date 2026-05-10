@@ -10,7 +10,7 @@ const rateLimit    = require('express-rate-limit');
 const path         = require('path');
 const fs           = require('fs');
 
-const { initDatabase } = require('./config/database');
+const { db } = require('./config/database');
 const publicRoutes     = require('./routes/public');
 const adminRoutes      = require('./routes/admin');
 
@@ -83,13 +83,6 @@ app.use((err, req, res, next) => {
 });
 
 /* ── Boot ── */
-initDatabase()
-  .then(() => {
-    app.listen(PORT, '0.0.0.0', () => {
-      console.log(`✦ Haka Barbers running on port ${PORT}`);
-    });
-  })
-  .catch(err => {
-    console.error('[Boot] Database init failed:', err);
-    process.exit(1);
-  });
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`✦ Haka Barbers running on port ${PORT}`);
+});
