@@ -11,7 +11,9 @@ const { sendCancellationEmail } = require('../config/email');
 const { timeToMinutes } = require('../config/hours');
 
 const router = express.Router();
-
+router.get('/debug', (req, res) => {
+  res.json({ ok: true, session: req.session });
+});
 /* ─── PAGE ROUTES ───────────────────────────────────────────────────────── */
 
 router.get('/', (req, res) => {
