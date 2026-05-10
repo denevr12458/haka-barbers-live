@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin Login — Haka Barbers</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>✂</text></svg>">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: 'Courier New', monospace; background: #0a0908; color: #ede0cc; min-height: 100vh; display: flex; align-items: center; justify-content: center; }
+    .login-container { max-width: 400px; width: 100%; padding: 40px 20px; }
+    .logo { text-align: center; font-size: 32px; letter-spacing: .3em; color: #c9a96e; text-transform: uppercase; margin-bottom: 40px; }
+    .form-group { margin-bottom: 20px; }
+    .form-label { display: block; margin-bottom: 8px; font-size: 14px; letter-spacing: .1em; text-transform: uppercase; color: #7a6858; }
+    .form-control { width: 100%; padding: 12px; background: #1c1510; border: 1px solid #3a2e22; color: #ede0cc; font-family: inherit; font-size: 16px; }
+    .form-control:focus { outline: none; border-color: #c9a96e; }
+    .btn { display: inline-block; padding: 14px 32px; background: #c9a96e; color: #080706; font-family: inherit; font-size: 14px; letter-spacing: .1em; text-transform: uppercase; text-decoration: none; border: none; cursor: pointer; width: 100%; text-align: center; }
+    .btn:hover { background: #b8995e; }
+    .alert { padding: 12px; margin-bottom: 20px; background: #3a2e22; color: #ff8080; border-left: 4px solid #ff8080; display: none; }
+    .spinner { display: inline-block; width: 16px; height: 16px; border: 2px solid #080706; border-radius: 50%; border-top-color: #c9a96e; animation: spin 1s ease-in-out infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+  <div class="login-container">
+    <div class="logo">HAKA</div>
+    <div id="alert" class="alert"></div>
+    <form id="login-form">
+      <div class="form-group">
+        <label class="form-label" for="username">Username</label>
+        <input type="text" id="username" class="form-control" required>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="password">Password</label>
+        <input type="password" id="password" class="form-control" required>
+      </div>
+      <button type="submit" id="submit-btn" class="btn">Login</button>
+    </form>
+  </div>
+
+  <script>
+    document.getElementById('login-form').addEventListener('submit', function(e) {
+      e.preventDefault();
+      const btn = document.getElementById('submit-btn');
+      const alert = document.getElementById('alert');
+      btn.disabled = true;
+      btn.innerHTML = '<span class="spinner"></span> Logging in…';
+      alert.style.display = 'none';
+
+      fetch('/admin/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          username: document.getElementById('username').value,
+          password: document.getElementById('password').value
+        })
+      })
+      .then(r => r.json())
+      .then(data => {
+        if (data.success) {
+          window.location.href = data.redirect;
+        } else {
+          alert.textContent = data.error || 'Login failed';
+          alert.style.display = 'block';
+          btn.disabled = false;
+          btn.textContent = 'Login';
+        }
+      })
+      .catch(() => {
+        alert.textContent = 'Network error';
+        alert.style.display = 'block';
+        btn.disabled = false;
+        btn.textContent = 'Login';
+      });
+    });
+  </script>
+</body>
+</html>

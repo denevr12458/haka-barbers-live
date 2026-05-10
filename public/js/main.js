@@ -374,3 +374,33 @@ document.querySelectorAll('a[href^="#"]').forEach(function(a) {
 
   renderSteps();
 })();
+
+/* ══════════════════════════════════════════════════════════════════════════
+   OPENING HOURS
+   ══════════════════════════════════════════════════════════════════════════ */
+(function() {
+  var hoursList = document.getElementById('hours-list');
+  if (!hoursList) return;
+
+  var days = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+  var hours = {
+    0: '11:00 – 16:00',
+    1: 'Closed',
+    2: '10:30 – 19:00',
+    3: '09:30 – 15:00',
+    4: '09:30 – 19:00',
+    5: '09:30 – 19:00',
+    6: '09:30 – 18:00'
+  };
+
+  var html = '<div style="font-size:14px;color:var(--warm-grey);line-height:1.6">';
+  days.forEach(function(day, i) {
+    var h = hours[i] || 'Closed';
+    html += '<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid var(--muted);border-opacity:0.2">';
+    html += '<span style="font-weight:500">' + day + '</span>';
+    html += '<span>' + h + '</span>';
+    html += '</div>';
+  });
+  html += '</div>';
+  hoursList.innerHTML = html;
+})();

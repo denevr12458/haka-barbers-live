@@ -165,14 +165,76 @@ router.get('/api/bookings', requireAuth, (req, res) => {
 router.patch('/api/bookings/:id', requireAuth, async (req, res) => {
   const { status } = req.body;
 
+  // Get booking details for email
+  db.get(
+    `SELECT b.*, s.name as service_name, s.duration, s.price
+     FROM bookings b
+     JOIN services s ON b.service_id = s.id
+     WHERE b.id=?`,
+    [req.params.id],
+    async (err, booking) => {
+      if (err) return res.status(500).json({ error: 'DB error' });
+      if (!booking) return res.status(404).json({ error: 'Booking not found' });
+
+      db.run('UPDATE bookings SET status=? WHERE id=?', [status, req.params.id], async (err) => {
+        if (err) return res.status(500).json({ error: 'Update failed' });
+
+        // Send cancellation email if status changed to cancelled
+        if (status === 'cancelled') {
+          try {
+            const { sendCancellationEmail } = require('../config/email');
+            await sendCancellationEmail(booking, { name: booking.service_name, duration: booking.duration, price: booking.price });
+          } catch (e) {
+            console.error('[Email]', e.message);
+          }
+        }
+
+        res.json({ success: true });
+      });
+    }
+  );
+});
+
+/* ─────────────────────────────────────────────
+   SERVICES (CRUD)
+   ───────────────────────────────────────────── */
+
+router.get('/api/services', requireAuth, (req, res) => {
+  db.all('SELECT * FROM services ORDER BY id', [], (err, rows) => {
+    if (err) return res.status(500).json({ error: 'DB error' });
+    res.json(rows);
+  });
+});
+
+router.post('/api/services', requireAuth, (req, res) => {
+  const { name, description, duration, price } = req.body;
   db.run(
-    'UPDATE bookings SET status=? WHERE id=?',
-    [status, req.params.id],
-    (err) => {
+    'INSERT INTO services (name, description, duration, price) VALUES (?,?,?,?) RETURNING id',
+    [name, description, duration, price],
+    function (err, result) {
+      if (err) return res.status(500).json({ error: 'Insert failed' });
+      res.json({ success: true, id: result.rows[0].id });
+    }
+  );
+});
+
+router.put('/api/services/:id', requireAuth, (req, res) => {
+  const { name, description, duration, price, active } = req.body;
+  db.run(
+    'UPDATE services SET name=?, description=?, duration=?, price=?, active=? WHERE id=?',
+    [name, description, duration, price, active, req.params.id],
+    function (err) {
       if (err) return res.status(500).json({ error: 'Update failed' });
       res.json({ success: true });
     }
   );
+});
+
+router.delete('/api/services/:id', requireAuth, (req, res) => {
+  db.run('DELETE FROM services WHERE id=?', [req.params.id], (err) => {
+    if (err) return res.status(500).json({ error: 'Delete failed' });
+    res.json({ success: true });
+  });
 });
 
 /* ─────────────────────────────────────────────
@@ -190,11 +252,11 @@ router.post('/api/blocks', requireAuth, (req, res) => {
   const { block_date, start_time, end_time, reason } = req.body;
 
   db.run(
-    'INSERT INTO blocked_slots (block_date,start_time,end_time,reason) VALUES (?,?,?,?)',
+    'INSERT INTO blocked_slots (block_date,start_time,end_time,reason) VALUES (?,?,?,?) RETURNING id',
     [block_date, start_time, end_time, reason || null],
-    function (err) {
+    function (err, result) {
       if (err) return res.status(500).json({ error: 'Insert failed' });
-      res.json({ success: true, id: this.lastID });
+      res.json({ success: true, id: result.rows[0].id });
     }
   );
 });
