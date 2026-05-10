@@ -62,9 +62,14 @@ app.use(session({
   },
 }));
 
-/* ── ✅ ROOT HEALTHCHECK (THIS FIXES RAILWAY) ── */
+/* ── SERVE FRONTEND (THIS IS THE FIX) ── */
+
+// serve static files (CSS, JS, images)
+app.use(express.static(path.join(__dirname, 'public')));
+
+// root route → serve your UI instead of text
 app.get('/', (req, res) => {
-  res.status(200).send('Haka Barbers server running ✅');
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
 /* ── API Routes ── */
