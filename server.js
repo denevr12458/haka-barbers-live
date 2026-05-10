@@ -21,19 +21,7 @@ const PORT = process.env.PORT || 3000;
 app.set('trust proxy', 1);
 
 /* ── Security headers ── */
-app.use(helmet({
-  contentSecurityPolicy: {
-    directives: {
-      defaultSrc: ["'self'"],
-      scriptSrc:  ["'self'", "'unsafe-inline'", 'fonts.googleapis.com'],
-      styleSrc:   ["'self'", "'unsafe-inline'", 'fonts.googleapis.com'],
-      fontSrc:    ["'self'", 'fonts.gstatic.com'],
-      imgSrc:     ["'self'", 'data:', 'https:'],
-      connectSrc: ["'self'"],
-      frameSrc:   ["'self'", 'https://www.google.com'],
-    },
-  },
-}));
+app.use(helmet());
 
 /* ── Body parsing ── */
 app.use(express.json({ limit: '10kb' }));
@@ -46,11 +34,6 @@ app.use('/api/', rateLimit({
   max: 150,
   standardHeaders: true,
   legacyHeaders: false
-}));
-
-app.use('/api/bookings', rateLimit({
-  windowMs: 60 * 60 * 1000,
-  max: 15
 }));
 
 /* ── Sessions ── */
@@ -79,39 +62,18 @@ app.use(session({
   },
 }));
 
-/* ── Static files ── */
-app.use(express.static(path.join(__dirname, 'public'), {
-  maxAge: process.env.NODE_ENV === 'production' ? '1d' : 0,
-}));
-
-/* ── Health check (Railway needs this) ── */
-app.get('/health', (req, res) => {
-  res.status(200).send('OK');
+/* ── ✅ ROOT HEALTHCHECK (THIS FIXES RAILWAY) ── */
+app.get('/', (req, res) => {
+  res.status(200).send('Haka Barbers server running ✅');
 });
 
-/* ── Routes ── */
+/* ── API Routes ── */
 app.use('/api', publicRoutes);
 app.use('/admin', adminRoutes);
-
-/* ── Root ── */
-app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
-});
-
-/* ── 404 ── */
-app.use((req, res) => {
-  if (req.path.startsWith('/api/') || req.path.startsWith('/admin/api/')) {
-    return res.status(404).json({ error: 'Not found.' });
-  }
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
-});
 
 /* ── Error handler ── */
 app.use((err, req, res, next) => {
   console.error('[Error]', err);
-  if (req.path.startsWith('/api/')) {
-    return res.status(500).json({ error: 'Internal server error.' });
-  }
   res.status(500).send('Internal Server Error');
 });
 
