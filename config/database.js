@@ -6,12 +6,23 @@ const { Pool } = require('pg');
    POSTGRES CONNECTION (RAILWAY SAFE)
    ───────────────────────────────────────────── */
 
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: process.env.NODE_ENV === 'production'
-    ? { rejectUnauthorized: false }
-    : false
-});
+let pool;
+
+try {
+  pool = new Pool({
+    connectionString: process.env.DATABASE_URL || null,
+    ssl: process.env.NODE_ENV === 'production'
+      ? { rejectUnauthorized: false }
+      : false
+  });
+  
+  pool.on('error', (err) => {
+    console.error('[POOL ERROR]', err.message);
+  });
+} catch (err) {
+  console.error('[POOL INIT ERROR]', err.message);
+  pool = null;
+}
 
 /* ─────────────────────────────────────────────
    SIMPLE DB WRAPPER (KEEPS YOUR EXISTING CODE WORKING)
@@ -19,18 +30,21 @@ const pool = new Pool({
 
 const db = {
   get: (text, params, callback) => {
+    if (!pool) return callback(new Error('Database not connected'));
     pool.query(text, params)
       .then(res => callback(null, res.rows[0]))
       .catch(err => callback(err));
   },
 
   all: (text, params, callback) => {
+    if (!pool) return callback(new Error('Database not connected'));
     pool.query(text, params)
       .then(res => callback(null, res.rows))
       .catch(err => callback(err));
   },
 
   run: (text, params, callback) => {
+    if (!pool) return callback(new Error('Database not connected'));
     pool.query(text, params)
       .then(res => callback(null, res))
       .catch(err => callback(err));
@@ -41,11 +55,12 @@ const db = {
    AUTO CREATE TABLES (PREVENTS LOGIN BREAKING)
    ───────────────────────────────────────────── */
 
-/* ─────────────────────────────────────────────
-   AUTO CREATE TABLES (PREVENTS LOGIN BREAKING)
-   ───────────────────────────────────────────── */
-
 const initDatabase = async () => {
+  if (!pool) {
+    console.log('[DB] WARNING: Database pool not initialized - skipping database setup');
+    return;
+  }
+
   if (!process.env.DATABASE_URL) {
     console.log('[DB] WARNING: No DATABASE_URL provided - database features will not work');
     return;

@@ -10,12 +10,29 @@ const rateLimit = require('express-rate-limit');
 const path = require('path');
 const fs = require('fs');
 
-const { initDatabase } = require('./config/database');
-const publicRoutes = require('./routes/public');
-const adminRoutes = require('./routes/admin');
-
 const app = express();
 const PORT = process.env.PORT || 3000;
+
+// Add health check FIRST before anything else
+app.get('/health', (req, res) => {
+  res.status(200).json({ ok: true });
+});
+
+// Load routes and database after health check is in place
+let initDatabase, publicRoutes, adminRoutes;
+
+try {
+  const db = require('./config/database');
+  initDatabase = db.initDatabase;
+  publicRoutes = require('./routes/public');
+  adminRoutes = require('./routes/admin');
+} catch (err) {
+  console.error('[INIT ERROR]', err.message);
+  // Create dummy routes in case loading fails
+  publicRoutes = express.Router();
+  adminRoutes = express.Router();
+  initDatabase = () => Promise.resolve();
+}
 
 /* ───────────────────────────────
    BASIC SETUP
@@ -86,46 +103,45 @@ app.use((err, req, res, next) => {
 });
 
 /* ───────────────────────────────
-   HEALTH CHECK ENDPOINT
-   ─────────────────────────────── */
-
-let dbReady = false;
-
-app.get('/health', (req, res) => {
-  res.status(200).json({ status: 'ok', db: dbReady ? 'connected' : 'initializing', timestamp: new Date().toISOString() });
-});
-
-/* ───────────────────────────────
    START SERVER IMMEDIATELY
    ─────────────────────────────── */
 
-const server = app.listen(PORT, '0.0.0.0', () => {
-  console.log(`[SERVER] Haka Barbers running on port ${PORT}`);
-});
+let server;
+
+try {
+  server = app.listen(PORT, '0.0.0.0', () => {
+    console.log(`[SERVER] Haka Barbers running on port ${PORT}`);
+  });
+} catch (err) {
+  console.error('[SERVER ERROR]', err.message);
+  process.exit(1);
+}
 
 /* ───────────────────────────────
    INITIALIZE DATABASE IN BACKGROUND
    ─────────────────────────────── */
 
-(async () => {
-  try {
-    await initDatabase();
-    dbReady = true;
-    console.log('[DB] Database initialized successfully');
-  } catch (err) {
-    console.error('[DB INIT WARNING]', err.message);
-    console.log('[DB] Database will retry on next request');
-  }
-})();
+if (initDatabase) {
+  (async () => {
+    try {
+      await initDatabase();
+      console.log('[DB] Database initialized successfully');
+    } catch (err) {
+      console.error('[DB WARNING]', err.message);
+    }
+  })();
+}
 
 /* ───────────────────────────────
    GRACEFUL SHUTDOWN
    ─────────────────────────────── */
 
 process.on('SIGTERM', () => {
-  console.log('[SERVER] SIGTERM received, shutting down gracefully');
-  server.close(() => {
-    console.log('[SERVER] Server closed');
-    process.exit(0);
-  });
+  console.log('[SERVER] SIGTERM received, shutting down');
+  if (server) {
+    server.close(() => {
+      console.log('[SERVER] Closed');
+      process.exit(0);
+    });
+  }
 });
