@@ -46,6 +46,11 @@ const db = {
    ───────────────────────────────────────────── */
 
 const initDatabase = async () => {
+  if (!process.env.DATABASE_URL) {
+    console.log('[DB] No DATABASE_URL provided - skipping database initialization');
+    return Promise.reject(new Error('DATABASE_URL not configured'));
+  }
+
   try {
     await pool.query(`
       CREATE TABLE IF NOT EXISTS owners (

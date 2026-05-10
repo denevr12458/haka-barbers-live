@@ -86,16 +86,36 @@ app.use((err, req, res, next) => {
 });
 
 /* ───────────────────────────────
-   START
+   HEALTH CHECK ENDPOINT
    ─────────────────────────────── */
 
+app.get('/health', async (req, res) => {
+  try {
+    // Simple health check - just check if server is running
+    res.json({ status: 'ok', timestamp: new Date().toISOString() });
+  } catch (err) {
+    res.status(500).json({ status: 'error', message: 'Health check failed' });
+  }
+});
+
+/* ───────────────────────────────
+   START (GRACEFUL DB INIT)
+   ─────────────────────────────── */
+
+const startServer = () => {
+  app.listen(PORT, '0.0.0.0', () => {
+    console.log(`Haka Barbers running on port ${PORT}`);
+  });
+};
+
+// Try to initialize database, but don't fail if it doesn't work
 initDatabase()
   .then(() => {
-    app.listen(PORT, '0.0.0.0', () => {
-      console.log(`Haka Barbers running on port ${PORT}`);
-    });
+    console.log('[DB] Database initialized successfully');
+    startServer();
   })
   .catch(err => {
-    console.error('[BOOT ERROR]', err);
-    process.exit(1);
+    console.error('[DB INIT WARNING]', err.message);
+    console.log('[DB] Starting server without database - some features may not work');
+    startServer();
   });

@@ -12,7 +12,10 @@ const router = express.Router();
 /* GET /api/services */
 router.get('/services', (req, res) => {
   db.all('SELECT id,name,description,duration,price FROM services WHERE active=1 ORDER BY id', [], (err, rows) => {
-    if (err) return res.status(500).json({ error: 'Failed to load services.' });
+    if (err) {
+      console.error('[DB ERROR]', err);
+      return res.status(500).json({ error: 'Database temporarily unavailable. Please try again later.' });
+    }
     res.json(rows);
   });
 });
@@ -40,7 +43,11 @@ router.get('/availability',
     if (!hrs) return res.json({ available: false, closed: true, slots: [] });
 
     db.get('SELECT duration FROM services WHERE id=? AND active=1', [service_id], (err, svc) => {
-      if (err || !svc) return res.status(404).json({ error: 'Service not found.' });
+      if (err) {
+        console.error('[DB ERROR]', err);
+        return res.status(500).json({ error: 'Database temporarily unavailable. Please try again later.' });
+      }
+      if (!svc) return res.status(404).json({ error: 'Service not found.' });
 
       const all = generateSlots(date, svc.duration);
 
@@ -51,7 +58,10 @@ router.get('/availability',
          SELECT start_time, end_time FROM blocked_slots WHERE block_date=?`,
         [date, date],
         (err, occupied) => {
-          if (err) return res.status(500).json({ error: 'Availability check failed.' });
+          if (err) {
+            console.error('[DB ERROR]', err);
+            return res.status(500).json({ error: 'Database temporarily unavailable. Please try again later.' });
+          }
 
           const free = all.filter(slot => {
             const sMin = timeToMinutes(slot);
@@ -88,7 +98,11 @@ router.post('/bookings',
       return res.status(400).json({ error: 'Cannot book dates in the past.' });
 
     db.get('SELECT * FROM services WHERE id=? AND active=1', [service_id], async (err, svc) => {
-      if (err || !svc) return res.status(404).json({ error: 'Service not found.' });
+      if (err) {
+        console.error('[DB ERROR]', err);
+        return res.status(500).json({ error: 'Database temporarily unavailable. Please try again later.' });
+      }
+      if (!svc) return res.status(404).json({ error: 'Service not found.' });
 
       const startMin = timeToMinutes(start_time);
       const end_time = minutesToTime(startMin + svc.duration);
@@ -105,7 +119,10 @@ router.post('/bookings',
          LIMIT 1`,
         [booking_date, end_time, start_time, booking_date, end_time, start_time],
         async (err, conflict) => {
-          if (err)      return res.status(500).json({ error: 'Booking check failed.' });
+          if (err) {
+            console.error('[DB ERROR]', err);
+            return res.status(500).json({ error: 'Database temporarily unavailable. Please try again later.' });
+          }
           if (conflict) return res.status(409).json({ error: 'This slot is no longer available. Please choose another time.' });
 
           const id = uuidv4();
@@ -115,6 +132,7 @@ router.post('/bookings',
             [id, customer_name, customer_email, customer_phone || null, service_id, booking_date, start_time, end_time, notes || null],
             async function(err) {
               if (err) {
+                console.error('[DB ERROR]', err);
                 if (err.message.includes('UNIQUE'))
                   return res.status(409).json({ error: 'That slot was just taken. Please try another time.' });
                 return res.status(500).json({ error: 'Booking failed. Please try again.' });

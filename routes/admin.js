@@ -150,8 +150,8 @@ router.get('/api/bookings', requireAuth, (req, res) => {
     [],
     (err, rows) => {
       if (err) {
-        console.error('[BOOKINGS ERROR]', err);
-        return res.status(500).json({ error: 'Database error' });
+        console.error('[DB ERROR]', err);
+        return res.status(500).json({ error: 'Database temporarily unavailable. Please try again later.' });
       }
       res.json(rows);
     }
@@ -201,7 +201,10 @@ router.patch('/api/bookings/:id', requireAuth, async (req, res) => {
 
 router.get('/api/services', requireAuth, (req, res) => {
   db.all('SELECT * FROM services ORDER BY id', [], (err, rows) => {
-    if (err) return res.status(500).json({ error: 'DB error' });
+    if (err) {
+      console.error('[DB ERROR]', err);
+      return res.status(500).json({ error: 'Database temporarily unavailable. Please try again later.' });
+    }
     res.json(rows);
   });
 });
@@ -243,7 +246,10 @@ router.delete('/api/services/:id', requireAuth, (req, res) => {
 
 router.get('/api/blocks', requireAuth, (req, res) => {
   db.all('SELECT * FROM blocked_slots', [], (err, rows) => {
-    if (err) return res.status(500).json({ error: 'DB error' });
+    if (err) {
+      console.error('[DB ERROR]', err);
+      return res.status(500).json({ error: 'Database temporarily unavailable. Please try again later.' });
+    }
     res.json(rows);
   });
 });
@@ -277,7 +283,10 @@ router.get('/api/stats', requireAuth, (req, res) => {
     `SELECT COUNT(*) as count FROM bookings`,
     [],
     (err, row) => {
-      if (err) return res.status(500).json({ error: 'DB error' });
+      if (err) {
+        console.error('[DB ERROR]', err);
+        return res.status(500).json({ error: 'Database temporarily unavailable. Please try again later.' });
+      }
       res.json({ totalBookings: row.count });
     }
   );
