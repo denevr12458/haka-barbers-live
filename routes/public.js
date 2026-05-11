@@ -110,43 +110,52 @@ db.get('SELECT * FROM services WHERE id=? AND active IS TRUE', [service_id], asy
       if (!isWithinOpeningHours(booking_date, start_time, end_time))
         return res.status(400).json({ error: 'Time is outside opening hours.' });
 
+      // Check for booking conflicts
       db.get(
-        `SELECT id FROM bookings
-         WHERE booking_date=? AND status NOT IN ('cancelled') AND start_time<? AND end_time>?
-         UNION ALL
-         SELECT CAST(id AS TEXT) FROM blocked_slots
-         WHERE block_date=? AND start_time<? AND end_time>?
-         LIMIT 1`,
-        [booking_date, end_time, start_time, booking_date, end_time, start_time],
-        async (err, conflict) => {
+        `SELECT id FROM bookings WHERE booking_date=? AND status NOT IN ('cancelled') AND start_time<? AND end_time>? LIMIT 1`,
+        [booking_date, end_time, start_time],
+        async (err, bookingConflict) => {
           if (err) {
             console.error('[DB ERROR]', err);
             return res.status(500).json({ error: 'Database temporarily unavailable. Please try again later.' });
           }
-          if (conflict) return res.status(409).json({ error: 'This slot is no longer available. Please choose another time.' });
+          if (bookingConflict) return res.status(409).json({ error: 'This slot is no longer available. Please choose another time.' });
 
-          const id = uuidv4();
-          db.run(
-            `INSERT INTO bookings (id,customer_name,customer_email,customer_phone,service_id,booking_date,start_time,end_time,notes)
-             VALUES (?,?,?,?,?,?,?,?,?)`,
-            [id, customer_name, customer_email, customer_phone || null, service_id, booking_date, start_time, end_time, notes || null],
-            async function(err) {
+          // Check for blocked slots conflicts
+          db.get(
+            `SELECT id FROM blocked_slots WHERE block_date=? AND start_time<? AND end_time>? LIMIT 1`,
+            [booking_date, end_time, start_time],
+            async (err, blockConflict) => {
               if (err) {
                 console.error('[DB ERROR]', err);
-                if (err.message.includes('UNIQUE'))
-                  return res.status(409).json({ error: 'That slot was just taken. Please try another time.' });
-                return res.status(500).json({ error: 'Booking failed. Please try again.' });
+                return res.status(500).json({ error: 'Database temporarily unavailable. Please try again later.' });
               }
+              if (blockConflict) return res.status(409).json({ error: 'This slot is no longer available. Please choose another time.' });
 
-              const booking = { id, customer_name, customer_email, customer_phone, booking_date, start_time, end_time, notes };
-              try { await sendCustomerConfirmation(booking, svc); } catch (e) { console.error('[Email]', e.message); }
-              try { await sendOwnerNotification(booking, svc);    } catch (e) { console.error('[Email]', e.message); }
+              const id = uuidv4();
+              db.run(
+                `INSERT INTO bookings (id,customer_name,customer_email,customer_phone,service_id,booking_date,start_time,end_time,notes)
+                 VALUES (?,?,?,?,?,?,?,?,?)`,
+                [id, customer_name, customer_email, customer_phone || null, service_id, booking_date, start_time, end_time, notes || null],
+                async function(err) {
+                  if (err) {
+                    console.error('[DB ERROR]', err);
+                    if (err.message.includes('UNIQUE'))
+                      return res.status(409).json({ error: 'That slot was just taken. Please try another time.' });
+                    return res.status(500).json({ error: 'Booking failed. Please try again.' });
+                  }
 
-              res.status(201).json({
-                success:    true,
-                message:    'Booking confirmed! Check your email for details.',
-                booking_id: id.split('-')[0].toUpperCase(),
-              });
+                  const booking = { id, customer_name, customer_email, customer_phone, booking_date, start_time, end_time, notes };
+                  try { await sendCustomerConfirmation(booking, svc); } catch (e) { console.error('[Email]', e.message); }
+                  try { await sendOwnerNotification(booking, svc);    } catch (e) { console.error('[Email]', e.message); }
+
+                  res.status(201).json({
+                    success:    true,
+                    message:    'Booking confirmed! Check your email for details.',
+                    booking_id: id.split('-')[0].toUpperCase(),
+                  });
+                }
+              );
             }
           );
         }

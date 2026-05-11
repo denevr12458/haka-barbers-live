@@ -316,11 +316,14 @@ router.get('/api/services', requireAuth, (req, res) => {
 router.post('/api/services', requireAuth, (req, res) => {
   const { name, description, duration, price } = req.body;
   db.run(
-    'INSERT INTO services (name, description, duration, price) VALUES (?,?,?,?) RETURNING id',
+    'INSERT INTO services (name, description, duration, price) VALUES (?,?,?,?)',
     [name, description, duration, price],
-    function (err, rows) {
-      if (err) return res.status(500).json({ error: 'Insert failed' });
-      res.json({ success: true, id: rows[0]?.id });
+    function (err) {
+      if (err) {
+        console.error('[DB ERROR]', err);
+        return res.status(500).json({ error: 'Insert failed' });
+      }
+      res.json({ success: true });
     }
   );
 });
@@ -366,11 +369,14 @@ router.post('/api/blocks', requireAuth, (req, res) => {
   }
 
   db.run(
-    'INSERT INTO blocked_slots (block_date,start_time,end_time,reason) VALUES (?,?,?,?) RETURNING id',
+    'INSERT INTO blocked_slots (block_date,start_time,end_time,reason) VALUES (?,?,?,?)',
     [block_date, start_time, end_time, reason || null],
-    function (err, rows) {
-      if (err) return res.status(500).json({ error: 'Insert failed' });
-      res.json({ success: true, id: rows[0]?.id });
+    function (err) {
+      if (err) {
+        console.error('[DB ERROR]', err);
+        return res.status(500).json({ error: 'Insert failed' });
+      }
+      res.json({ success: true });
     }
   );
 });
