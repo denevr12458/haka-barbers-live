@@ -2,37 +2,34 @@
 
 const nodemailer = require('nodemailer');
 
-function createTransporter() {
-  const smtpUser = process.env.SMTP_USER || process.env.SMTP_EMAIL || process.env.SMTP_USERNAME;
-  const smtpPass = process.env.SMTP_PASS || process.env.SMTP_PASSWORD;
-  const host = process.env.SMTP_HOST || 'smtp.gmail.com';
-  const port = parseInt(process.env.SMTP_PORT || '587');
-  const secure = process.env.SMTP_SECURE === 'true';
+const SMTP_USER = process.env.SMTP_USER || process.env.SMTP_EMAIL || process.env.SMTP_USERNAME;
+const SMTP_PASS = process.env.SMTP_PASS || process.env.SMTP_PASSWORD;
+const HOST      = process.env.SMTP_HOST || 'smtp.gmail.com';
+const PORT      = parseInt(process.env.SMTP_PORT || '587');
+const SECURE    = process.env.SMTP_SECURE === 'true';
+const FROM      = `"Haka Barbers" <${SMTP_USER || 'noreply@haka-barbers.com'}>`;
+const OWNER     = process.env.OWNER_EMAIL || SMTP_USER || 'dscott09ymk@gmail.com';
+const SITE      = process.env.SITE_URL || 'http://localhost:3000';
 
+function createTransporter() {
   const transportConfig = {
-    host,
-    port,
-    secure,
+    host: HOST,
+    port: PORT,
+    secure: SECURE,
     tls: {
       rejectUnauthorized: false,
     },
   };
 
-  if (smtpUser && smtpPass) {
+  if (SMTP_USER && SMTP_PASS) {
     transportConfig.auth = {
-      user: smtpUser,
-      pass: smtpPass,
+      user: SMTP_USER,
+      pass: SMTP_PASS,
     };
   }
 
   return nodemailer.createTransport(transportConfig);
 }
-
-const SMTP_USER = process.env.SMTP_USER || process.env.SMTP_EMAIL || process.env.SMTP_USERNAME;
-const SMTP_PASS = process.env.SMTP_PASS || process.env.SMTP_PASSWORD;
-const FROM      = `"Haka Barbers" <${SMTP_USER || 'noreply@haka-barbers.com'}>`;
-const OWNER     = process.env.OWNER_EMAIL || SMTP_USER || 'dscott09ymk@gmail.com';
-const SITE      = process.env.SITE_URL || 'http://localhost:3000';
 
 /* ── Shared email shell ── */
 function shell(body) {
