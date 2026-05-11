@@ -223,9 +223,11 @@ document.querySelectorAll('a[href^="#"]').forEach(function(a) {
       var grid = document.getElementById('service-select-grid');
       if (!grid) return;
       grid.innerHTML = services.map(function(s) {
-        return '<div class="service-option" data-id="' + s.id + '" data-duration="' + s.duration + '" data-name="' + s.name + '" data-price="' + s.price + '">'
+        var price = typeof s.price === 'string' ? parseFloat(s.price) : s.price;
+        if (Number.isNaN(price)) price = 0;
+        return '<div class="service-option" data-id="' + s.id + '" data-duration="' + s.duration + '" data-name="' + s.name + '" data-price="' + price + '">'
           + '<div class="service-option-name">' + s.name + '</div>'
-          + '<div class="service-option-price">£' + s.price.toFixed(2) + '</div>'
+          + '<div class="service-option-price">£' + price.toFixed(2) + '</div>'
           + '<div class="service-option-duration">' + s.duration + ' min</div>'
           + '</div>';
       }).join('');
@@ -234,8 +236,10 @@ document.querySelectorAll('a[href^="#"]').forEach(function(a) {
       var sg = document.getElementById('services-grid');
       if (sg) {
         sg.innerHTML = services.map(function(s) {
+          var price = typeof s.price === 'string' ? parseFloat(s.price) : s.price;
+          if (Number.isNaN(price)) price = 0;
           return '<div class="service-card">'
-            + '<div class="service-card-top"><span class="service-name">' + s.name + '</span><span class="service-price">£' + s.price + '</span></div>'
+            + '<div class="service-card-top"><span class="service-name">' + s.name + '</span><span class="service-price">£' + price.toFixed(2) + '</span></div>'
             + '<p class="service-desc">' + s.description + '</p>'
             + '<div class="service-duration">' + s.duration + ' min</div>'
             + '<button class="service-book-btn" aria-label="Book ' + s.name + '">Book →</button>'

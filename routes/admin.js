@@ -17,11 +17,16 @@ const router = express.Router();
    ───────────────────────────────────────────── */
 
 const ensureAdminExists = async () => {
+  if (!isConnected()) {
+    console.log('[ADMIN SEED] Database not connected yet, retrying in 5 seconds...');
+    return setTimeout(ensureAdminExists, 5000);
+  }
+
   console.log('[ADMIN SEED] Checking for admin user...');
 
   db.get('SELECT id, username FROM owners WHERE username = ?', ['admin'], async (err, row) => {
     if (err) {
-      console.error('[ADMIN SEED ERROR]', err);
+      console.error('[ADMIN SEED ERROR]', err.message || err);
       // Try again in 5 seconds
       setTimeout(ensureAdminExists, 5000);
       return;
@@ -38,14 +43,14 @@ const ensureAdminExists = async () => {
           ['admin', hash],
           (err) => {
             if (err) {
-              console.error('[ADMIN CREATE ERROR]', err);
+              console.error('[ADMIN CREATE ERROR]', err.message || err);
             } else {
               console.log('[ADMIN CREATED] username: admin | password: admin123');
             }
           }
         );
       } catch (e) {
-        console.error('[ADMIN HASH ERROR]', e);
+        console.error('[ADMIN HASH ERROR]', e.message || e);
       }
     } else {
       console.log('[ADMIN] Default admin user already exists (id:', row.id + ')');
@@ -53,7 +58,7 @@ const ensureAdminExists = async () => {
   });
 };
 
-// Run immediately and also after 2 seconds as backup
+// Retry the admin seed until the database is ready
 ensureAdminExists();
 setTimeout(ensureAdminExists, 2000);
 
@@ -235,48 +240,6 @@ router.get('/api/stats', requireAuth, (req, res) => {
   });
 });
 
-/* ─────────────────────────────────────────────
-   BLOCKED SLOTS
-   ───────────────────────────────────────────── */
-
-router.get('/api/blocks', requireAuth, (req, res) => {
-  db.all('SELECT * FROM blocked_slots ORDER BY block_date, start_time', [], (err, rows) => {
-    if (err) {
-      console.error('[DB ERROR]', err);
-      return res.status(500).json({ error: 'Unable to load blocked slots' });
-    }
-    res.json(rows);
-  });
-});
-
-router.post('/api/blocks', requireAuth, (req, res) => {
-  const { block_date, start_time, end_time, reason } = req.body;
-  if (!block_date || !start_time || !end_time) {
-    return res.status(400).json({ error: 'Date, start and end time are required.' });
-  }
-
-  db.run(
-    'INSERT INTO blocked_slots (block_date, start_time, end_time, reason) VALUES (?, ?, ?, ?)',
-    [block_date, start_time, end_time, reason || null],
-    (err) => {
-      if (err) {
-        console.error('[DB ERROR]', err);
-        return res.status(500).json({ error: 'Unable to create blocked slot' });
-      }
-      res.json({ success: true });
-    }
-  );
-});
-
-router.delete('/api/blocks/:id', requireAuth, (req, res) => {
-  db.run('DELETE FROM blocked_slots WHERE id=?', [req.params.id], (err) => {
-    if (err) {
-      console.error('[DB ERROR]', err);
-      return res.status(500).json({ error: 'Unable to delete blocked slot' });
-    }
-    res.json({ success: true });
-  });
-});
 
 /* ─────────────────────────────────────────────
    BOOKINGS (UNCHANGED BUT SAFER)
@@ -355,18 +318,19 @@ router.post('/api/services', requireAuth, (req, res) => {
   db.run(
     'INSERT INTO services (name, description, duration, price) VALUES (?,?,?,?) RETURNING id',
     [name, description, duration, price],
-    function (err, result) {
+    function (err, rows) {
       if (err) return res.status(500).json({ error: 'Insert failed' });
-      res.json({ success: true, id: result.rows[0].id });
+      res.json({ success: true, id: rows[0]?.id });
     }
   );
 });
 
 router.put('/api/services/:id', requireAuth, (req, res) => {
   const { name, description, duration, price, active } = req.body;
+  const activeValue = active === 'false' || active === false || active === 0 ? false : true;
   db.run(
-    'UPDATE services SET name=?, description=?, duration=?, price=?, active=? WHERE id=?',
-    [name, description, duration, price, active, req.params.id],
+    'UPDATE services SET name=?, description=?, duration=?, price=?, active=CAST(? AS BOOLEAN) WHERE id=?',
+    [name, description, duration, price, activeValue, req.params.id],
     function (err) {
       if (err) return res.status(500).json({ error: 'Update failed' });
       res.json({ success: true });
@@ -397,13 +361,16 @@ router.get('/api/blocks', requireAuth, (req, res) => {
 
 router.post('/api/blocks', requireAuth, (req, res) => {
   const { block_date, start_time, end_time, reason } = req.body;
+  if (!block_date || !start_time || !end_time) {
+    return res.status(400).json({ error: 'Date, start and end time are required.' });
+  }
 
   db.run(
     'INSERT INTO blocked_slots (block_date,start_time,end_time,reason) VALUES (?,?,?,?) RETURNING id',
     [block_date, start_time, end_time, reason || null],
-    function (err, result) {
+    function (err, rows) {
       if (err) return res.status(500).json({ error: 'Insert failed' });
-      res.json({ success: true, id: result.rows[0].id });
+      res.json({ success: true, id: rows[0]?.id });
     }
   );
 });
@@ -414,25 +381,5 @@ router.delete('/api/blocks/:id', requireAuth, (req, res) => {
     res.json({ success: true });
   });
 });
-
-/* ─────────────────────────────────────────────
-   STATS (SAFE)
-   ───────────────────────────────────────────── */
-
-router.get('/api/stats', requireAuth, (req, res) => {
-  db.get(
-    `SELECT COUNT(*) as count FROM bookings`,
-    [],
-    (err, row) => {
-      if (err) {
-        console.error('[DB ERROR]', err);
-        return res.status(500).json({ error: 'Database temporarily unavailable. Please try again later.' });
-      }
-      res.json({ totalBookings: row.count });
-    }
-  );
-});
-
-/* ───────────────────────────────────────────── */
 
 module.exports = router;

@@ -11,7 +11,7 @@ const router = express.Router();
 
 /* GET /api/services */
 router.get('/services', (req, res) => {
-  db.all('SELECT id,name,description,duration,price FROM services WHERE active=1 ORDER BY id', [], (err, rows) => {
+  db.all('SELECT id,name,description,duration,price FROM services WHERE active IS TRUE ORDER BY id', [], (err, rows) => {
     if (err) {
       console.error('[DB ERROR]', err);
       return res.status(500).json({ error: 'Database temporarily unavailable. Please try again later.' });
@@ -42,7 +42,7 @@ router.get('/availability',
     const hrs = getHoursForDate(date);
     if (!hrs) return res.json({ available: false, closed: true, slots: [] });
 
-    db.get('SELECT duration FROM services WHERE id=? AND active=1', [service_id], (err, svc) => {
+db.get('SELECT duration FROM services WHERE id=? AND active IS TRUE', [service_id], (err, svc) => {
       if (err) {
         console.error('[DB ERROR]', err);
         return res.status(500).json({ error: 'Database temporarily unavailable. Please try again later.' });
@@ -97,7 +97,7 @@ router.post('/bookings',
     if (new Date(booking_date + 'T00:00:00') < today)
       return res.status(400).json({ error: 'Cannot book dates in the past.' });
 
-    db.get('SELECT * FROM services WHERE id=? AND active=1', [service_id], async (err, svc) => {
+db.get('SELECT * FROM services WHERE id=? AND active IS TRUE', [service_id], async (err, svc) => {
       if (err) {
         console.error('[DB ERROR]', err);
         return res.status(500).json({ error: 'Database temporarily unavailable. Please try again later.' });
