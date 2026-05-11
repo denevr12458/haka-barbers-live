@@ -5,7 +5,7 @@ const bcrypt   = require('bcryptjs');
 const path     = require('path');
 const { body, validationResult } = require('express-validator');
 
-const { db } = require('../config/database');
+const { db, isConnected, getRawDatabaseUrl } = require('../config/database');
 const { requireAuth, requireGuest } = require('../middleware/auth');
 const { sendCancellationEmail } = require('../config/email');
 const { timeToMinutes } = require('../config/hours');
@@ -61,11 +61,32 @@ const ensureAdminExists = async () => {
    ───────────────────────────────────────────── */
 
 router.get('/debug-admin', (req, res) => {
+  const dbUrl = getRawDatabaseUrl().trim();
+  const isPlaceholder = /your-railway-connection-string-here/i.test(dbUrl);
+  const configured = Boolean(dbUrl && !isPlaceholder);
+  const connected = isConnected();
+
+  if (!configured) {
+    return res.json({
+      configured: false,
+      connected,
+      error: 'DATABASE_URL is not configured. Replace the placeholder with your Railway connection string.'
+    });
+  }
+
+  if (!connected) {
+    return res.json({
+      configured: true,
+      connected: false,
+      error: 'Database pool not initialized. Check DATABASE_URL and app logs.'
+    });
+  }
+
   db.get('SELECT id, username FROM owners LIMIT 5', [], (err, row) => {
     if (err) {
-      return res.json({ error: 'Database error', details: err.message });
+      return res.json({ error: 'Database error', details: err.message, configured: true, connected: true });
     }
-    res.json({ admin_users: row ? [row] : [], database_connected: true });
+    res.json({ admin_users: row ? [row] : [], database_connected: true, configured: true, connected: true });
   });
 });
 

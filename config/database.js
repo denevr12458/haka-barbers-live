@@ -16,32 +16,31 @@ const normalizeSql = (text, params) => {
 };
 
 try {
-  const connectionString = process.env.DATABASE_URL || null;
-  let validConnectionString = null;
+  const rawConnectionString = process.env.DATABASE_URL || '';
+  const connectionString = rawConnectionString.trim().replace(/^['"]|['"]$/g, '');
+  const isPlaceholder = /your-railway-connection-string-here/i.test(connectionString);
 
-  if (connectionString) {
+  if (!connectionString || isPlaceholder) {
+    console.error('[DB CONFIG] DATABASE_URL is missing or contains a placeholder value');
+  } else {
     try {
-      new URL(connectionString);
-      validConnectionString = connectionString;
-    } catch (err) {
-      console.error('[DB CONFIG ERROR] Invalid DATABASE_URL:', err.message);
-    }
-  }
+      pool = new Pool({
+        connectionString,
+        connectionTimeoutMillis: 5000,
+        idleTimeoutMillis: 30000,
+        max: 5,
+        ssl: process.env.NODE_ENV === 'production'
+          ? { rejectUnauthorized: false }
+          : false
+      });
 
-  if (validConnectionString) {
-    pool = new Pool({
-      connectionString: validConnectionString,
-      connectionTimeoutMillis: 5000,
-      idleTimeoutMillis: 30000,
-      max: 5,
-      ssl: process.env.NODE_ENV === 'production'
-        ? { rejectUnauthorized: false }
-        : false
-    });
-    
-    pool.on('error', (err) => {
-      console.error('[POOL ERROR]', err.message);
-    });
+      pool.on('error', (err) => {
+        console.error('[POOL ERROR]', err.message);
+      });
+    } catch (err) {
+      console.error('[POOL INIT ERROR]', err.message);
+      pool = null;
+    }
   }
 } catch (err) {
   console.error('[POOL INIT ERROR]', err.message);
@@ -154,4 +153,7 @@ const initDatabase = async () => {
   }
 };
 
-module.exports = { db, initDatabase };
+const isConnected = () => !!pool;
+const getRawDatabaseUrl = () => process.env.DATABASE_URL || '';
+
+module.exports = { db, initDatabase, isConnected, getRawDatabaseUrl };
