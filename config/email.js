@@ -83,6 +83,8 @@ async function sendCustomerConfirmation(booking, service) {
     console.log('[Email] SMTP not configured — skipping customer email');
     return;
   }
+  const price = Number(service.price) || 0;
+  const duration = Number(service.duration) || 0;
   const body = `
     <h2>Your appointment is confirmed.</h2>
     <p>Hi ${booking.customer_name}, we're looking forward to seeing you. Please arrive 5 minutes early.<br>
@@ -92,8 +94,8 @@ async function sendCustomerConfirmation(booking, service) {
       <div class="row"><span class="rl">Service</span><span class="rv">${service.name}</span></div>
       <div class="row"><span class="rl">Date</span><span class="rv">${fmtDate(booking.booking_date)}</span></div>
       <div class="row"><span class="rl">Time</span><span class="rv">${fmtTime(booking.start_time)}</span></div>
-      <div class="row"><span class="rl">Duration</span><span class="rv">${service.duration} minutes</span></div>
-      <div class="row"><span class="rl">Price</span><span class="rv gold">£${service.price.toFixed(2)}</span></div>
+      <div class="row"><span class="rl">Duration</span><span class="rv">${duration} minutes</span></div>
+      <div class="row"><span class="rl">Price</span><span class="rv gold">£${price.toFixed(2)}</span></div>
       <div class="row"><span class="rl">Reference</span><span class="rv" style="font-size:12px;letter-spacing:.1em">${booking.id.split('-')[0].toUpperCase()}</span></div>
     </div>
     <p style="font-size:13px;color:#7a6858"><strong style="color:#c9a96e">Address:</strong> 123 Barber Street, London, EC1A 1BB<br>
@@ -115,6 +117,8 @@ async function sendOwnerNotification(booking, service) {
     console.log('[Email] SMTP not configured — skipping owner email');
     return;
   }
+  const price = Number(service.price) || 0;
+  const duration = Number(service.duration) || 0;
   const body = `
     <h2>New booking received.</h2>
     <p>A customer has just booked through the website.</p>
@@ -127,6 +131,7 @@ async function sendOwnerNotification(booking, service) {
       <div class="row"><span class="rl">Date</span><span class="rv">${fmtDate(booking.booking_date)}</span></div>
       <div class="row"><span class="rl">Time</span><span class="rv">${fmtTime(booking.start_time)} – ${fmtTime(booking.end_time)}</span></div>
       <div class="row"><span class="rl">Notes</span><span class="rv">${booking.notes || 'None'}</span></div>
+      <div class="row"><span class="rl">Price</span><span class="rv gold">£${price.toFixed(2)}</span></div>
       <div class="row"><span class="rl">Booking ID</span><span class="rv" style="font-size:11px">${booking.id}</span></div>
     </div>
     <p style="text-align:center"><a href="${SITE}/admin/dashboard" class="cta">View in Dashboard</a></p>`;
