@@ -8,20 +8,41 @@ const { Pool } = require('pg');
 
 let pool;
 
+const normalizeSql = (text, params) => {
+  if (!params || params.length === 0) return { text, params };
+  let index = 0;
+  const normalizedText = text.replace(/\?/g, () => `$${++index}`);
+  return { text: normalizedText, params };
+};
+
 try {
-  pool = new Pool({
-    connectionString: process.env.DATABASE_URL || null,
-    connectionTimeoutMillis: 5000,
-    idleTimeoutMillis: 30000,
-    max: 5,
-    ssl: process.env.NODE_ENV === 'production'
-      ? { rejectUnauthorized: false }
-      : false
-  });
-  
-  pool.on('error', (err) => {
-    console.error('[POOL ERROR]', err.message);
-  });
+  const connectionString = process.env.DATABASE_URL || null;
+  let validConnectionString = null;
+
+  if (connectionString) {
+    try {
+      new URL(connectionString);
+      validConnectionString = connectionString;
+    } catch (err) {
+      console.error('[DB CONFIG ERROR] Invalid DATABASE_URL:', err.message);
+    }
+  }
+
+  if (validConnectionString) {
+    pool = new Pool({
+      connectionString: validConnectionString,
+      connectionTimeoutMillis: 5000,
+      idleTimeoutMillis: 30000,
+      max: 5,
+      ssl: process.env.NODE_ENV === 'production'
+        ? { rejectUnauthorized: false }
+        : false
+    });
+    
+    pool.on('error', (err) => {
+      console.error('[POOL ERROR]', err.message);
+    });
+  }
 } catch (err) {
   console.error('[POOL INIT ERROR]', err.message);
   pool = null;
@@ -34,21 +55,24 @@ try {
 const db = {
   get: (text, params, callback) => {
     if (!pool) return callback(new Error('Database not connected'));
-    pool.query(text, params)
+    const query = normalizeSql(text, params);
+    pool.query(query.text, query.params)
       .then(res => callback(null, res.rows[0]))
       .catch(err => callback(err));
   },
 
   all: (text, params, callback) => {
     if (!pool) return callback(new Error('Database not connected'));
-    pool.query(text, params)
+    const query = normalizeSql(text, params);
+    pool.query(query.text, query.params)
       .then(res => callback(null, res.rows))
       .catch(err => callback(err));
   },
 
   run: (text, params, callback) => {
     if (!pool) return callback(new Error('Database not connected'));
-    pool.query(text, params)
+    const query = normalizeSql(text, params);
+    pool.query(query.text, query.params)
       .then(res => callback(null, res))
       .catch(err => callback(err));
   }

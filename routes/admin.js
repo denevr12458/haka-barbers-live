@@ -17,7 +17,7 @@ const router = express.Router();
    ───────────────────────────────────────────── */
 
 const ensureAdminExists = async () => {
-  db.get('SELECT * FROM owners LIMIT 1', async (err, row) => {
+  db.get('SELECT * FROM owners LIMIT 1', [], async (err, row) => {
     if (err) {
       console.error('[ADMIN SEED ERROR]', err);
       return;
@@ -130,9 +130,73 @@ router.post(
    LOGOUT
    ───────────────────────────────────────────── */
 
+router.get('/logout', requireAuth, (req, res) => {
+  req.session.destroy(() => {
+    res.clearCookie('haka.sid');
+    res.redirect('/admin/login');
+  });
+});
+
 router.post('/logout', requireAuth, (req, res) => {
   req.session.destroy(() => {
     res.clearCookie('haka.sid');
+    res.json({ success: true });
+  });
+});
+
+/* ─────────────────────────────────────────────
+   ADMIN DASHBOARD METRICS
+   ───────────────────────────────────────────── */
+
+router.get('/api/stats', requireAuth, (req, res) => {
+  db.get('SELECT COUNT(*) AS totalbookings FROM bookings', [], (err, row) => {
+    if (err) {
+      console.error('[DB ERROR]', err);
+      return res.status(500).json({ error: 'Unable to fetch stats' });
+    }
+    res.json({ totalBookings: Number(row?.totalbookings || row?.totalBookings || 0) });
+  });
+});
+
+/* ─────────────────────────────────────────────
+   BLOCKED SLOTS
+   ───────────────────────────────────────────── */
+
+router.get('/api/blocks', requireAuth, (req, res) => {
+  db.all('SELECT * FROM blocked_slots ORDER BY block_date, start_time', [], (err, rows) => {
+    if (err) {
+      console.error('[DB ERROR]', err);
+      return res.status(500).json({ error: 'Unable to load blocked slots' });
+    }
+    res.json(rows);
+  });
+});
+
+router.post('/api/blocks', requireAuth, (req, res) => {
+  const { block_date, start_time, end_time, reason } = req.body;
+  if (!block_date || !start_time || !end_time) {
+    return res.status(400).json({ error: 'Date, start and end time are required.' });
+  }
+
+  db.run(
+    'INSERT INTO blocked_slots (block_date, start_time, end_time, reason) VALUES (?, ?, ?, ?)',
+    [block_date, start_time, end_time, reason || null],
+    (err) => {
+      if (err) {
+        console.error('[DB ERROR]', err);
+        return res.status(500).json({ error: 'Unable to create blocked slot' });
+      }
+      res.json({ success: true });
+    }
+  );
+});
+
+router.delete('/api/blocks/:id', requireAuth, (req, res) => {
+  db.run('DELETE FROM blocked_slots WHERE id=?', [req.params.id], (err) => {
+    if (err) {
+      console.error('[DB ERROR]', err);
+      return res.status(500).json({ error: 'Unable to delete blocked slot' });
+    }
     res.json({ success: true });
   });
 });
