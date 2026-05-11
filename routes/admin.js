@@ -100,6 +100,17 @@ router.get('/debug-admin', (req, res) => {
   });
 });
 
+router.get('/debug-email', requireAuth, async (req, res) => {
+  const { testSmtpConnection } = require('../config/email');
+  try {
+    const status = await testSmtpConnection();
+    return res.json(status);
+  } catch (err) {
+    console.error('[EMAIL DEBUG]', err);
+    return res.status(500).json({ error: 'Email debug failed', details: err.message });
+  }
+});
+
 router.get('/', (req, res) => {
   if (req.session?.ownerId) return res.redirect('/admin/dashboard');
   return res.redirect('/admin/login');

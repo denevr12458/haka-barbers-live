@@ -169,4 +169,39 @@ async function sendCancellationEmail(booking, service) {
   console.log(`[Email] Cancellation → ${booking.customer_email}`);
 }
 
-module.exports = { sendCustomerConfirmation, sendOwnerNotification, sendCancellationEmail };
+async function testSmtpConnection() {
+  if (!SMTP_USER || !SMTP_PASS) {
+    return {
+      configured: false,
+      error: 'SMTP_USER and SMTP_PASS are required for email delivery',
+      host: SMTP_HOST,
+      port: SMTP_PORT,
+      secure: process.env.SMTP_SECURE === 'true',
+    };
+  }
+
+  const transporter = createTransporter();
+  try {
+    await transporter.verify();
+    return {
+      configured: true,
+      verified: true,
+      host: transporter.options.host,
+      port: transporter.options.port,
+      secure: transporter.options.secure,
+      auth: Boolean(transporter.options.auth),
+    };
+  } catch (err) {
+    return {
+      configured: true,
+      verified: false,
+      error: err.message,
+      host: transporter.options.host,
+      port: transporter.options.port,
+      secure: transporter.options.secure,
+      auth: Boolean(transporter.options.auth),
+    };
+  }
+}
+
+module.exports = { sendCustomerConfirmation, sendOwnerNotification, sendCancellationEmail, testSmtpConnection };
