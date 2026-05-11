@@ -18,10 +18,11 @@ const normalizeSql = (text, params) => {
 try {
   const rawConnectionString = process.env.DATABASE_URL || '';
   const connectionString = rawConnectionString.trim().replace(/^['"]|['"]$/g, '').replace(/^postgresql:/, 'postgres:');
-  const isPlaceholder = /your-railway-connection-string-here/i.test(connectionString);
+  const isPlaceholder = /your-railway-connection-string-here|postgresql:\/\/username:password@host:port\/database|postgres:\/\/postgres:password@containers-us-west-1\.railway\.app:5432\/railway/i.test(connectionString);
 
   if (!connectionString || isPlaceholder) {
-    console.error('[DB CONFIG] DATABASE_URL is missing or contains a placeholder value');
+    console.error('[DB CONFIG] DATABASE_URL is missing, invalid, or using a placeholder value');
+    console.error('[DB CONFIG] Current DATABASE_URL:', connectionString || '<empty>');
   } else {
     try {
       const useSsl = process.env.NODE_ENV === 'production' || /railway|rlwy\.net|proxy/i.test(connectionString) || process.env.PGSSLMODE === 'require';

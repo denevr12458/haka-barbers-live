@@ -120,10 +120,15 @@ router.post(
     body('password').notEmpty()
   ],
   (req, res) => {
+    const wantsJson = req.is('application/json');
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
       console.log('[LOGIN] Validation errors:', errors.array());
-      return res.status(400).json({ error: 'Username and password required.' });
+      const errorMessage = 'Username and password required.';
+      if (wantsJson) {
+        return res.status(400).json({ error: errorMessage });
+      }
+      return res.redirect('/admin/login');
     }
 
     const { username, password } = req.body;
@@ -135,17 +140,18 @@ router.post(
       async (err, owner) => {
         if (err) {
           console.error('[DB ERROR]', err);
-          return res.status(500).json({ error: 'Database error' });
+          if (wantsJson) {
+            return res.status(500).json({ error: 'Database error' });
+          }
+          return res.redirect('/admin/login');
         }
 
-        if (!owner) {
-          console.log('[LOGIN] User not found:', username);
-          return res.status(401).json({ error: 'Invalid credentials' });
-        }
-
-        if (!owner.password) {
-          console.log('[LOGIN] No password for user:', username);
-          return res.status(401).json({ error: 'Invalid credentials' });
+        if (!owner || !owner.password) {
+          console.log('[LOGIN] Invalid login attempt for:', username);
+          if (wantsJson) {
+            return res.status(401).json({ error: 'Invalid credentials' });
+          }
+          return res.redirect('/admin/login');
         }
 
         let match = false;
@@ -155,12 +161,18 @@ router.post(
           console.log('[LOGIN] Password match result:', match, 'for user:', username);
         } catch (e) {
           console.error('[BCRYPT ERROR]', e);
-          return res.status(500).json({ error: 'Authentication error' });
+          if (wantsJson) {
+            return res.status(500).json({ error: 'Authentication error' });
+          }
+          return res.redirect('/admin/login');
         }
 
         if (!match) {
           console.log('[LOGIN] Password mismatch for user:', username);
-          return res.status(401).json({ error: 'Invalid credentials' });
+          if (wantsJson) {
+            return res.status(401).json({ error: 'Invalid credentials' });
+          }
+          return res.redirect('/admin/login');
         }
 
         console.log('[LOGIN] Success for user:', username);
@@ -168,17 +180,23 @@ router.post(
         req.session.regenerate((err) => {
           if (err) {
             console.error('[SESSION ERROR]', err);
-            return res.status(500).json({ error: 'Session error' });
+            if (wantsJson) {
+              return res.status(500).json({ error: 'Session error' });
+            }
+            return res.status(500).send('Session error');
           }
 
           req.session.ownerId = owner.id;
           req.session.username = owner.username;
           console.log('[LOGIN] Session created for user:', username, 'session ID:', req.session.id);
 
-          res.json({
-            success: true,
-            redirect: '/admin/dashboard'
-          });
+          if (wantsJson) {
+            return res.json({
+              success: true,
+              redirect: '/admin/dashboard'
+            });
+          }
+          return res.redirect('/admin/dashboard');
         });
       }
     );
