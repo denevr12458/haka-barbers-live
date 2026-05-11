@@ -17,21 +17,20 @@ const normalizeSql = (text, params) => {
 
 try {
   const rawConnectionString = process.env.DATABASE_URL || '';
-  const connectionString = rawConnectionString.trim().replace(/^['"]|['"]$/g, '');
+  const connectionString = rawConnectionString.trim().replace(/^['"]|['"]$/g, '').replace(/^postgresql:/, 'postgres:');
   const isPlaceholder = /your-railway-connection-string-here/i.test(connectionString);
 
   if (!connectionString || isPlaceholder) {
     console.error('[DB CONFIG] DATABASE_URL is missing or contains a placeholder value');
   } else {
     try {
+      const useSsl = process.env.NODE_ENV === 'production' || /railway|rlwy\.net|proxy/i.test(connectionString) || process.env.PGSSLMODE === 'require';
       pool = new Pool({
         connectionString,
         connectionTimeoutMillis: 5000,
         idleTimeoutMillis: 30000,
         max: 5,
-        ssl: process.env.NODE_ENV === 'production'
-          ? { rejectUnauthorized: false }
-          : false
+        ssl: useSsl ? { rejectUnauthorized: false } : false
       });
 
       pool.on('error', (err) => {

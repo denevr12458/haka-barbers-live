@@ -17,40 +17,45 @@ const router = express.Router();
    ───────────────────────────────────────────── */
 
 const ensureAdminExists = async () => {
-  // Wait a bit for database to initialize
-  setTimeout(async () => {
-    db.get('SELECT * FROM owners LIMIT 1', [], async (err, row) => {
-      if (err) {
-        console.error('[ADMIN SEED ERROR]', err);
-        return;
-      }
+  console.log('[ADMIN SEED] Checking for admin user...');
 
-      if (!row) {
-        console.log('[ADMIN] No owner found — creating default admin...');
+  db.get('SELECT id, username FROM owners WHERE username = ?', ['admin'], async (err, row) => {
+    if (err) {
+      console.error('[ADMIN SEED ERROR]', err);
+      // Try again in 5 seconds
+      setTimeout(ensureAdminExists, 5000);
+      return;
+    }
 
-        try {
-          const hash = await bcrypt.hash('admin123', 12);
+    if (!row) {
+      console.log('[ADMIN] No admin user found — creating default admin...');
 
-          db.run(
-            'INSERT INTO owners (username, password) VALUES (?, ?)',
-            ['admin', hash],
-            (err) => {
-              if (err) {
-                console.error('[ADMIN CREATE ERROR]', err);
-              } else {
-                console.log('[ADMIN CREATED] username: admin | password: admin123');
-              }
+      try {
+        const hash = await bcrypt.hash('admin123', 12);
+
+        db.run(
+          'INSERT INTO owners (username, password) VALUES (?, ?)',
+          ['admin', hash],
+          (err) => {
+            if (err) {
+              console.error('[ADMIN CREATE ERROR]', err);
+            } else {
+              console.log('[ADMIN CREATED] username: admin | password: admin123');
             }
-          );
-        } catch (e) {
-          console.error('[ADMIN HASH ERROR]', e);
-        }
-      } else {
-        console.log('[ADMIN] Default admin user already exists');
+          }
+        );
+      } catch (e) {
+        console.error('[ADMIN HASH ERROR]', e);
       }
-    });
-  }, 2000); // Wait 2 seconds for DB init
+    } else {
+      console.log('[ADMIN] Default admin user already exists (id:', row.id + ')');
+    }
+  });
 };
+
+// Run immediately and also after 2 seconds as backup
+ensureAdminExists();
+setTimeout(ensureAdminExists, 2000);
 
 /* ─────────────────────────────────────────────
    MANUAL ADMIN CREATION (DEBUG ENDPOINT)
@@ -122,7 +127,7 @@ router.post(
     }
 
     const { username, password } = req.body;
-    console.log('[LOGIN] Attempt for user:', username);
+    console.log('[LOGIN] Attempt for user:', username, 'from IP:', req.ip);
 
     db.get(
       'SELECT * FROM owners WHERE username=?',
@@ -147,7 +152,7 @@ router.post(
 
         try {
           match = await bcrypt.compare(password, owner.password);
-          console.log('[LOGIN] Password match result:', match);
+          console.log('[LOGIN] Password match result:', match, 'for user:', username);
         } catch (e) {
           console.error('[BCRYPT ERROR]', e);
           return res.status(500).json({ error: 'Authentication error' });
@@ -168,7 +173,7 @@ router.post(
 
           req.session.ownerId = owner.id;
           req.session.username = owner.username;
-          console.log('[LOGIN] Session created for user:', username);
+          console.log('[LOGIN] Session created for user:', username, 'session ID:', req.session.id);
 
           res.json({
             success: true,
