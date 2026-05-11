@@ -3,20 +3,36 @@
 const nodemailer = require('nodemailer');
 
 function createTransporter() {
-  return nodemailer.createTransport({
-    host:   process.env.SMTP_HOST || 'smtp.gmail.com',
-    port:   parseInt(process.env.SMTP_PORT  || '587'),
-    secure: process.env.SMTP_SECURE === 'true',
-    auth: {
-      user: process.env.SMTP_USER,
-      pass: process.env.SMTP_PASS,
+  const smtpUser = process.env.SMTP_USER || process.env.SMTP_EMAIL || process.env.SMTP_USERNAME;
+  const smtpPass = process.env.SMTP_PASS || process.env.SMTP_PASSWORD;
+  const host = process.env.SMTP_HOST || 'smtp.gmail.com';
+  const port = parseInt(process.env.SMTP_PORT || '587');
+  const secure = process.env.SMTP_SECURE === 'true';
+
+  const transportConfig = {
+    host,
+    port,
+    secure,
+    tls: {
+      rejectUnauthorized: false,
     },
-  });
+  };
+
+  if (smtpUser && smtpPass) {
+    transportConfig.auth = {
+      user: smtpUser,
+      pass: smtpPass,
+    };
+  }
+
+  return nodemailer.createTransport(transportConfig);
 }
 
-const FROM    = `"Haka Barbers" <${process.env.SMTP_USER || 'dscott09ymk@gmail.com'}>`;
-const OWNER   = process.env.OWNER_EMAIL || 'dscott09ymk@gmail.com';
-const SITE    = process.env.SITE_URL    || 'http://localhost:3000';
+const SMTP_USER = process.env.SMTP_USER || process.env.SMTP_EMAIL || process.env.SMTP_USERNAME;
+const SMTP_PASS = process.env.SMTP_PASS || process.env.SMTP_PASSWORD;
+const FROM      = `"Haka Barbers" <${SMTP_USER || 'noreply@haka-barbers.com'}>`;
+const OWNER     = process.env.OWNER_EMAIL || SMTP_USER || 'dscott09ymk@gmail.com';
+const SITE      = process.env.SITE_URL || 'http://localhost:3000';
 
 /* ── Shared email shell ── */
 function shell(body) {
@@ -63,7 +79,7 @@ function fmtTime(t) {
 
 /* ── Customer confirmation ── */
 async function sendCustomerConfirmation(booking, service) {
-  if (!process.env.SMTP_USER || !process.env.SMTP_PASS) {
+  if (!SMTP_USER || !SMTP_PASS) {
     console.log('[Email] SMTP not configured — skipping customer email');
     return;
   }
@@ -95,7 +111,7 @@ async function sendCustomerConfirmation(booking, service) {
 
 /* ── Owner notification ── */
 async function sendOwnerNotification(booking, service) {
-  if (!process.env.SMTP_USER || !process.env.SMTP_PASS) {
+  if (!SMTP_USER || !SMTP_PASS) {
     console.log('[Email] SMTP not configured — skipping owner email');
     return;
   }
@@ -126,7 +142,7 @@ async function sendOwnerNotification(booking, service) {
 
 /* ── Cancellation to customer ── */
 async function sendCancellationEmail(booking, service) {
-  if (!process.env.SMTP_USER || !process.env.SMTP_PASS) return;
+  if (!SMTP_USER || !SMTP_PASS) return;
   const body = `
     <h2>Your appointment has been cancelled.</h2>
     <p>Hi ${booking.customer_name}, your appointment has been cancelled. We're sorry for any inconvenience.
