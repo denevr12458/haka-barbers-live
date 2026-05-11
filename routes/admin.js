@@ -17,37 +17,57 @@ const router = express.Router();
    ───────────────────────────────────────────── */
 
 const ensureAdminExists = async () => {
-  db.get('SELECT * FROM owners LIMIT 1', [], async (err, row) => {
-    if (err) {
-      console.error('[ADMIN SEED ERROR]', err);
-      return;
-    }
+  // Wait a bit for database to initialize
+  setTimeout(async () => {
+    db.get('SELECT * FROM owners LIMIT 1', [], async (err, row) => {
+      if (err) {
+        console.error('[ADMIN SEED ERROR]', err);
+        return;
+      }
 
-    if (!row) {
-      console.log('[ADMIN] No owner found — creating default admin...');
+      if (!row) {
+        console.log('[ADMIN] No owner found — creating default admin...');
 
-      const hash = await bcrypt.hash('admin123', 12);
+        try {
+          const hash = await bcrypt.hash('admin123', 12);
 
-      db.run(
-        'INSERT INTO owners (username, password) VALUES (?, ?)',
-        ['admin', hash],
-        (err) => {
-          if (err) {
-            console.error('[ADMIN CREATE ERROR]', err);
-          } else {
-            console.log('[ADMIN CREATED] username: admin | password: admin123');
-          }
+          db.run(
+            'INSERT INTO owners (username, password) VALUES (?, ?)',
+            ['admin', hash],
+            (err) => {
+              if (err) {
+                console.error('[ADMIN CREATE ERROR]', err);
+              } else {
+                console.log('[ADMIN CREATED] username: admin | password: admin123');
+              }
+            }
+          );
+        } catch (e) {
+          console.error('[ADMIN HASH ERROR]', e);
         }
-      );
-    }
-  });
+      } else {
+        console.log('[ADMIN] Default admin user already exists');
+      }
+    });
+  }, 2000); // Wait 2 seconds for DB init
 };
 
-ensureAdminExists();
+/* ─────────────────────────────────────────────
+   MANUAL ADMIN CREATION (DEBUG ENDPOINT)
+   ───────────────────────────────────────────── */
 
 /* ─────────────────────────────────────────────
-   PAGE ROUTES
+   DEBUG ENDPOINT - Check admin user
    ───────────────────────────────────────────── */
+
+router.get('/debug-admin', (req, res) => {
+  db.get('SELECT id, username FROM owners LIMIT 5', [], (err, row) => {
+    if (err) {
+      return res.json({ error: 'Database error', details: err.message });
+    }
+    res.json({ admin_users: row ? [row] : [], database_connected: true });
+  });
+});
 
 router.get('/', (req, res) => {
   if (req.session?.ownerId) return res.redirect('/admin/dashboard');
@@ -76,10 +96,12 @@ router.post(
   (req, res) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
+      console.log('[LOGIN] Validation errors:', errors.array());
       return res.status(400).json({ error: 'Username and password required.' });
     }
 
     const { username, password } = req.body;
+    console.log('[LOGIN] Attempt for user:', username);
 
     db.get(
       'SELECT * FROM owners WHERE username=?',
@@ -90,7 +112,13 @@ router.post(
           return res.status(500).json({ error: 'Database error' });
         }
 
-        if (!owner || !owner.password) {
+        if (!owner) {
+          console.log('[LOGIN] User not found:', username);
+          return res.status(401).json({ error: 'Invalid credentials' });
+        }
+
+        if (!owner.password) {
+          console.log('[LOGIN] No password for user:', username);
           return res.status(401).json({ error: 'Invalid credentials' });
         }
 
@@ -98,14 +126,18 @@ router.post(
 
         try {
           match = await bcrypt.compare(password, owner.password);
+          console.log('[LOGIN] Password match result:', match);
         } catch (e) {
           console.error('[BCRYPT ERROR]', e);
           return res.status(500).json({ error: 'Authentication error' });
         }
 
         if (!match) {
+          console.log('[LOGIN] Password mismatch for user:', username);
           return res.status(401).json({ error: 'Invalid credentials' });
         }
+
+        console.log('[LOGIN] Success for user:', username);
 
         req.session.regenerate((err) => {
           if (err) {
@@ -115,6 +147,7 @@ router.post(
 
           req.session.ownerId = owner.id;
           req.session.username = owner.username;
+          console.log('[LOGIN] Session created for user:', username);
 
           res.json({
             success: true,
