@@ -170,13 +170,25 @@ async function sendCancellationEmail(booking, service) {
 }
 
 async function testSmtpConnection() {
+  // If no SMTP configured, return early with helpful message
   if (!SMTP_USER || !SMTP_PASS) {
     return {
       configured: false,
-      error: 'SMTP_USER and SMTP_PASS are required for email delivery',
-      host: SMTP_HOST,
-      port: SMTP_PORT,
-      secure: process.env.SMTP_SECURE === 'true',
+      error: 'SMTP not configured. Set these Railway environment variables:',
+      required_vars: [
+        'SMTP_USER=your-email@gmail.com',
+        'SMTP_PASS=your-app-password',
+        'SMTP_HOST=smtp.gmail.com',
+        'SMTP_PORT=587',
+        'SMTP_SECURE=false',
+        'OWNER_EMAIL=your-email@gmail.com',
+        'SITE_URL=https://your-railway-domain.up.railway.app'
+      ],
+      alternatives: [
+        'Use Outlook: SMTP_HOST=smtp-mail.outlook.com',
+        'Use SendGrid: SMTP_HOST=smtp.sendgrid.net, SMTP_USER=apikey',
+        'Use Mailgun: Check their SMTP settings'
+      ]
     };
   }
 
@@ -186,20 +198,27 @@ async function testSmtpConnection() {
     return {
       configured: true,
       verified: true,
-      host: transporter.options.host,
-      port: transporter.options.port,
-      secure: transporter.options.secure,
-      auth: Boolean(transporter.options.auth),
+      host: HOST,
+      port: PORT,
+      secure: SECURE,
+      auth: Boolean(SMTP_USER && SMTP_PASS),
+      ready_to_send: true
     };
   } catch (err) {
     return {
       configured: true,
       verified: false,
       error: err.message,
-      host: transporter.options.host,
-      port: transporter.options.port,
-      secure: transporter.options.secure,
-      auth: Boolean(transporter.options.auth),
+      host: HOST,
+      port: PORT,
+      secure: SECURE,
+      auth: Boolean(SMTP_USER && SMTP_PASS),
+      troubleshooting: [
+        'Check SMTP credentials are correct',
+        'Verify app password (for Gmail)',
+        'Try different SMTP provider',
+        'Check Railway environment variables'
+      ]
     };
   }
 }
