@@ -2,20 +2,23 @@
 
 const nodemailer = require('nodemailer');
 
-const SMTP_USER = process.env.SMTP_USER || process.env.SMTP_EMAIL || process.env.SMTP_USERNAME;
-const SMTP_PASS = process.env.SMTP_PASS || process.env.SMTP_PASSWORD;
-const HOST      = process.env.SMTP_HOST || 'smtp.gmail.com';
-const PORT      = parseInt(process.env.SMTP_PORT || '587');
-const SECURE    = process.env.SMTP_SECURE === 'true';
-const FROM      = `"Haka Barbers" <${SMTP_USER || 'noreply@haka-barbers.com'}>`;
-const OWNER     = process.env.OWNER_EMAIL || SMTP_USER || 'dscott09ymk@gmail.com';
-const SITE      = process.env.SITE_URL || 'http://localhost:3000';
+const SMTP_USER        = process.env.SMTP_USER || process.env.SMTP_EMAIL || process.env.SMTP_USERNAME;
+const SMTP_PASS        = process.env.SMTP_PASS || process.env.SMTP_PASSWORD;
+const SMTP_HOST        = process.env.SMTP_HOST || 'smtp.gmail.com';
+const SMTP_PORT        = parseInt(process.env.SMTP_PORT || '587');
+const SMTP_SECURE      = process.env.SMTP_SECURE === 'true';
+const SENDGRID_API_KEY = process.env.SENDGRID_API_KEY;
+const MAILGUN_API_KEY  = process.env.MAILGUN_API_KEY;
+const MAILGUN_DOMAIN   = process.env.MAILGUN_DOMAIN;
+const FROM             = `"Haka Barbers" <${SMTP_USER || 'noreply@haka-barbers.com'}>`;
+const OWNER            = process.env.OWNER_EMAIL || SMTP_USER || 'dscott09ymk@gmail.com';
+const SITE             = process.env.SITE_URL || 'http://localhost:3000';
 
 function createTransporter() {
   const transportConfig = {
-    host: HOST,
-    port: PORT,
-    secure: SECURE,
+    host: SMTP_HOST,
+    port: SMTP_PORT,
+    secure: SMTP_SECURE,
     tls: {
       rejectUnauthorized: false,
     },
@@ -29,6 +32,65 @@ function createTransporter() {
   }
 
   return nodemailer.createTransport(transportConfig);
+}
+
+async function sendViaSendGrid({ to, subject, html }) {
+  const res = await fetch('https://api.sendgrid.com/v3/mail/send', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${SENDGRID_API_KEY}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      personalizations: [{ to: [{ email: to }] }],
+      from: { email: SMTP_USER || 'noreply@haka-barbers.com', name: 'Haka Barbers' },
+      subject,
+      content: [{ type: 'text/html', value: html }]
+    })
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`SendGrid failed: ${res.status} ${text}`);
+  }
+}
+
+async function sendViaMailgun({ to, subject, html }) {
+  const params = new URLSearchParams();
+  params.append('from', FROM);
+  params.append('to', to);
+  params.append('subject', subject);
+  params.append('html', html);
+
+  const auth = 'Basic ' + Buffer.from(`api:${MAILGUN_API_KEY}`).toString('base64');
+  const res = await fetch(`https://api.mailgun.net/v3/${MAILGUN_DOMAIN}/messages`, {
+    method: 'POST',
+    headers: {
+      Authorization: auth,
+      'Content-Type': 'application/x-www-form-urlencoded'
+    },
+    body: params.toString()
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Mailgun failed: ${res.status} ${text}`);
+  }
+}
+
+async function sendViaSmtp({ to, subject, html }) {
+  const transporter = createTransporter();
+  await transporter.sendMail({ from: FROM, to, subject, html });
+}
+
+async function sendEmail({ to, subject, html }) {
+  if (SENDGRID_API_KEY) {
+    return sendViaSendGrid({ to, subject, html });
+  }
+  if (MAILGUN_API_KEY && MAILGUN_DOMAIN) {
+    return sendViaMailgun({ to, subject, html });
+  }
+  return sendViaSmtp({ to, subject, html });
 }
 
 /* ── Shared email shell ── */
@@ -99,19 +161,18 @@ async function sendCustomerConfirmation(booking, service) {
     <strong style="color:#c9a96e">Contact:</strong> ${OWNER}</p>
     <p style="text-align:center"><a href="${SITE}/#booking" class="cta">Book Another Appointment</a></p>`;
 
-  await createTransporter().sendMail({
-    from:    FROM,
-    to:      booking.customer_email,
+  await sendEmail({
+    to: booking.customer_email,
     subject: `Appointment Confirmed — ${fmtDate(booking.booking_date)} at ${fmtTime(booking.start_time)}`,
-    html:    shell(body),
+    html: shell(body)
   });
   console.log(`[Email] Confirmation → ${booking.customer_email}`);
 }
 
 /* ── Owner notification ── */
 async function sendOwnerNotification(booking, service) {
-  if (!SMTP_USER || !SMTP_PASS) {
-    console.log('[Email] SMTP not configured — skipping owner email');
+  if (!SMTP_USER && !SENDGRID_API_KEY && !(MAILGUN_API_KEY && MAILGUN_DOMAIN)) {
+    console.log('[Email] No email provider configured — skipping owner email');
     return;
   }
   const price = Number(service.price) || 0;
@@ -133,18 +194,17 @@ async function sendOwnerNotification(booking, service) {
     </div>
     <p style="text-align:center"><a href="${SITE}/admin/dashboard" class="cta">View in Dashboard</a></p>`;
 
-  await createTransporter().sendMail({
-    from:    FROM,
-    to:      OWNER,
+  await sendEmail({
+    to: OWNER,
     subject: `[Haka] New Booking — ${booking.customer_name} · ${fmtDate(booking.booking_date)}`,
-    html:    shell(body),
+    html: shell(body)
   });
   console.log(`[Email] Owner notification → ${OWNER}`);
 }
 
 /* ── Cancellation to customer ── */
 async function sendCancellationEmail(booking, service) {
-  if (!SMTP_USER || !SMTP_PASS) return;
+  if (!SMTP_USER && !SENDGRID_API_KEY && !(MAILGUN_API_KEY && MAILGUN_DOMAIN)) return;
   const body = `
     <h2>Your appointment has been cancelled.</h2>
     <p>Hi ${booking.customer_name}, your appointment has been cancelled. We're sorry for any inconvenience.
@@ -157,17 +217,80 @@ async function sendCancellationEmail(booking, service) {
     </div>
     <p style="text-align:center"><a href="${SITE}/#booking" class="cta">Rebook Now</a></p>`;
 
-  await createTransporter().sendMail({
-    from:    FROM,
-    to:      booking.customer_email,
+  await sendEmail({
+    to: booking.customer_email,
     subject: `Appointment Cancelled — Haka Barbers`,
-    html:    shell(body),
+    html: shell(body)
   });
   console.log(`[Email] Cancellation → ${booking.customer_email}`);
 }
 
 async function testSmtpConnection() {
-  // If no SMTP configured, return early with helpful message
+  if (SENDGRID_API_KEY) {
+    try {
+      const res = await fetch('https://api.sendgrid.com/v3/user/account', {
+        headers: {
+          Authorization: `Bearer ${SENDGRID_API_KEY}`,
+        }
+      });
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(`SendGrid verify failed: ${res.status} ${text}`);
+      }
+      return {
+        configured: true,
+        verified: true,
+        provider: 'sendgrid',
+        auth: true,
+        details: 'SendGrid API key is valid'
+      };
+    } catch (err) {
+      return {
+        configured: true,
+        verified: false,
+        provider: 'sendgrid',
+        error: err.message,
+        troubleshooting: [
+          'Verify SENDGRID_API_KEY is correct',
+          'Check SendGrid account permissions',
+          'Use SMTP or Mailgun if needed'
+        ]
+      };
+    }
+  }
+
+  if (MAILGUN_API_KEY && MAILGUN_DOMAIN) {
+    try {
+      const auth = 'Basic ' + Buffer.from(`api:${MAILGUN_API_KEY}`).toString('base64');
+      const res = await fetch(`https://api.mailgun.net/v3/domains/${MAILGUN_DOMAIN}`, {
+        headers: { Authorization: auth }
+      });
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(`Mailgun verify failed: ${res.status} ${text}`);
+      }
+      return {
+        configured: true,
+        verified: true,
+        provider: 'mailgun',
+        auth: true,
+        details: 'Mailgun API key and domain are valid'
+      };
+    } catch (err) {
+      return {
+        configured: true,
+        verified: false,
+        provider: 'mailgun',
+        error: err.message,
+        troubleshooting: [
+          'Verify MAILGUN_API_KEY is correct',
+          'Verify MAILGUN_DOMAIN is correct',
+          'Check Mailgun account status'
+        ]
+      };
+    }
+  }
+
   if (!SMTP_USER || !SMTP_PASS) {
     return {
       configured: false,
@@ -182,9 +305,8 @@ async function testSmtpConnection() {
         'SITE_URL=https://your-railway-domain.up.railway.app'
       ],
       alternatives: [
-        'Use Outlook: SMTP_HOST=smtp-mail.outlook.com',
-        'Use SendGrid: SMTP_HOST=smtp.sendgrid.net, SMTP_USER=apikey',
-        'Use Mailgun: Check their SMTP settings'
+        'Use SendGrid: set SENDGRID_API_KEY',
+        'Use Mailgun: set MAILGUN_API_KEY and MAILGUN_DOMAIN'
       ]
     };
   }
@@ -195,25 +317,27 @@ async function testSmtpConnection() {
     return {
       configured: true,
       verified: true,
-      host: HOST,
-      port: PORT,
-      secure: SECURE,
-      auth: Boolean(SMTP_USER && SMTP_PASS),
+      provider: 'smtp',
+      host: SMTP_HOST,
+      port: SMTP_PORT,
+      secure: SMTP_SECURE,
+      auth: true,
       ready_to_send: true
     };
   } catch (err) {
     return {
       configured: true,
       verified: false,
+      provider: 'smtp',
       error: err.message,
-      host: HOST,
-      port: PORT,
-      secure: SECURE,
+      host: SMTP_HOST,
+      port: SMTP_PORT,
+      secure: SMTP_SECURE,
       auth: Boolean(SMTP_USER && SMTP_PASS),
       troubleshooting: [
         'Check SMTP credentials are correct',
         'Verify app password (for Gmail)',
-        'Try different SMTP provider',
+        'Try SendGrid or Mailgun instead',
         'Check Railway environment variables'
       ]
     };
